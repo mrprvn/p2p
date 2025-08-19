@@ -2,26 +2,61 @@
 
 import ChatForm from "@/components/chat-form";
 import ChatMessage from "@/components/chat-message";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {socket} from "@/lib/socket-client"
+import { getOffer, getAnswer, addStream, acceptAnswer, onTrack, onIceCandidate, addIceCandidate } from "@/service/peer";
+import { Button } from "@/components/ui/button";
 
 export default function Home() {
+  const videoRef = useRef<HTMLVideoElement>(null);
   const [room, setRoom] = useState("");
   const [joined, setJoined] = useState(false);
   const [username, setUsername] = useState("");
   const [messages, setMessages] = useState<{sender: string; message: string}[]>([]);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
+
   useEffect(() => {
     socket.on("message", (data) => {
       setMessages((prev) => [...prev, data]);
     })
-    socket.on("user-joined", (message) => {
+    socket.on("user-joined", ({message}) => {
       setMessages((prev) => [...prev, {sender: "system", message}])
     })
+    socket.on("offer-send", async ({from, offer}) => {
+      // closePeer();
+      const ans = await getAnswer(offer);
+      socket.emit("offer-ack", {to: from, offerAck: ans});
+      // start sending back ICE candidates to caller
+      onIceCandidate((candidate) => socket.emit("ice-candidate", { to: from, candidate }));
+    })
+    socket.on("offer-accepted",async ({from, offerAck}) => {
+      await acceptAnswer(offerAck)
+      // start sending ICE candidates to callee
+      onIceCandidate((candidate) => socket.emit("ice-candidate", { to: from, candidate }));
+    })
+    socket.on("ice-candidate", async ({ from, candidate }) => {
+      await addIceCandidate(candidate);
+    })
     return () => {
-      socket.off("user-joined");
       socket.off("message");
+      socket.off("user-joined");
+      socket.off("offer-send");
+      socket.off("ice-candidate");
     }
   }, [])
+
+  // Register onTrack handler once (separate from socket events)
+  useEffect(() => {
+    onTrack((event) => {
+      const [remote] = event.streams;
+      const element = document.getElementById("remoteVideo") as HTMLVideoElement | null;
+      if (element && remote) {
+        element.srcObject = remote;
+        element.play?.().catch(() => {});
+      }
+    });
+  }, []);
 
   const handleSendMessage = (message: string) => {
     const data = {room, message, sender: username};
@@ -35,6 +70,23 @@ export default function Home() {
       setJoined(true);
     }
   };
+
+  const handleShareVideo = async () => {
+    const video = videoRef.current;
+    if (!video) return;
+    const capture = (video as HTMLVideoElement & { captureStream?: () => MediaStream }).captureStream;
+    if (!capture) {
+      console.warn("captureStream is not supported in this browser");
+      return;
+    }
+    // ensure playback so captureStream has active tracks
+    try { await video.play(); } catch {}
+    const stream = capture.call(video);
+    addStream(stream)
+    const offer = await getOffer();
+    socket.emit("offer", {room, offer});
+  };
+
   return (
     <div className="flex w-full mt-24 justify-center">
       {!joined ? (
@@ -55,6 +107,14 @@ export default function Home() {
           }
         </div>
         <ChatForm onSendMessage={handleSendMessage} />
+        <input type="file" onChange={(e) => setSelectedFile(e.target.files?.[0] || null)} />
+        <video
+          ref={videoRef}
+          controls
+          src={selectedFile ? URL.createObjectURL(selectedFile) : ""}
+        />
+        <video id="remoteVideo" autoPlay playsInline />
+        <Button className="cursor-pointer" onClick={handleShareVideo}>Share Video</Button>
       </div>)}
    
     </div>

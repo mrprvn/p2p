@@ -19,17 +19,28 @@ app.prepare().then(() => {
     socket.on("join-room", ({room, username}) => {
       socket.join(room);
       console.log(`${username} joined room ${room}`);
-      socket.to(room).emit("user-joined", `${username} joined the room`);
+      socket.to(room).emit("user-joined", {message: `${username} joined the room`, userId: socket.id});
     });
 
     socket.on("message", ({room, message, sender}) => {
       socket.to(room).emit("message", {sender, message})
     })
 
+    socket.on("offer", ({room, offer}) => {
+      socket.to(room).emit("offer-send", {from: socket.id, offer});
+    })
+
+    socket.on("offer-ack", ({to, offerAck}) => {
+      socket.to(to).emit("offer-accepted", {from: socket.id, offerAck});
+    })
+
+    socket.on("ice-candidate", ({to, candidate}) => {
+      socket.to(to).emit("ice-candidate", { from: socket.id, candidate });
+    })
+
     socket.on("disconnect", () => {
       console.log("A user disconnected");
     });
-
   });
 
   httpServer.listen(port, () => {
