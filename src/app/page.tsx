@@ -178,7 +178,7 @@ export default function Home() {
             src={videoSrc ?? undefined}
             style={{ maxWidth: "100%", marginTop: 8 }}
           />
-          <video ref={remoteVideoRef} id="remoteVideo" autoPlay playsInline />
+          <video ref={remoteVideoRef} id="remoteVideo" controls autoPlay playsInline />
           <Button className="cursor-pointer" onClick={handleShareVideo}>
             Share Video
           </Button>
