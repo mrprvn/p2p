@@ -2,9 +2,13 @@
 import { createServer } from "node:http";
 import { Server } from "socket.io";
 import next from "next";
+import "dotenv/config";
 const dev = process.env.NODE_ENV !== "production";
 const hostname = process.env.HOSTNAME || "localhost";
 const port = parseInt(process.env.PORT || "3000", 10);
+console.log("Hostname", process.env.HOSTNAME);
+console.log("Port", process.env.PORT);
+console.log("Dev", process.env.NODE_ENV);
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
 app.prepare().then(() => {
